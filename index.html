@@ -50,29 +50,56 @@
 		Give a high-level overview of what you implemented in this homework. Think about what you've built as a whole. Share your thoughts on what interesting things you've learned from completing the homework.
 
 		<h2>Part 1: Ray Generation and Scene Intersection</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
-		<p>Here is an example 2x2 gridlike structure using an HTML table. Each <b>tr</b> is a row and each <b>td</b> is a column in that row. You might find this useful for framing and showing your result images in an organized fashion.</p>
+		<h3>Ray generation and intersection</h3>
+		<p>I implemented ray generation and pixel sampling according to the spec.</p>
+		<ul>
+			<li><code>raytrace_pixel</code> takes <code>ns_aa</code> random samples inside the pixel, normalizes each by the image width and height, generates a camera ray, and averages the estimated radiance.</li>
+			<li><code>generate_ray</code> maps (x, y) in [0,1]^2 to the sensor point ((2x-1)*tan(hFov/2), (2y-1)*tan(vFov/2), -1) in camera space. The world-space ray starts at <code>pos</code>, has direction normalize(c2w * point), and its min_t and max_t are set to nClip and fClip.</li>
+			<li>Each primitive accepts a hit only if min_t &lt;= t &lt;= max_t, then sets max_t = t. This way the last recorded hit is the closest one.</li>
+		</ul>
+
+		<h3>Triangle intersection</h3>
+		<p>I used the Moller-Trumbore algorithm. It solves o + t*d = (1-b1-b2)*p1 + b1*p2 + b2*p3 for t, b1 and b2 in one step:</p>
+		<ul>
+			<li>e1 = p2 - p1, e2 = p3 - p1, s = o - p1, s1 = d x e2, s2 = s x e1</li>
+			<li>t = (s2 . e2) / (s1 . e1), b1 = (s1 . s) / (s1 . e1), b2 = (s2 . d) / (s1 . e1)</li>
+		</ul>
+		<p>It's a hit if s1 . e1 is not near zero, b1 &gt;= 0, b2 &gt;= 0, b1 + b2 &lt;= 1, and t is within [min_t, max_t]. The normal is the barycentric blend of n1, n2 and n3.</p>
+		<p>For spheres, I solved the quadratic and took the smaller root in [min_t, max_t], falling back to the larger one. The normal is normalize(hit point - center).</p>
+
+		<h3>Results: normal shading</h3>
+		<p>Rendered at 800x600 with <code>-f</code>, e.g. <code>./pathtracer -r 800 600 -f CBempty.png ../dae/sky/CBempty.dae</code>.</p>
 		<div style="display: flex; flex-direction: column; align-items: center;">
 			<table style="width: 100%; text-align: center; border-collapse: collapse;">
 			  <tr>
 				<td style="text-align: center;">
-				  <img src="assets/cornell.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				  <img src="assets/p1_CBempty.png" width="400px"/>
+				  <figcaption><code>CBempty.dae</code></figcaption>
 				</td>
 				<td style="text-align: center;">
-				  <img src="assets/cornell.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				  <img src="assets/p1_CBspheres_lambertian.png" width="400px"/>
+				  <figcaption><code>CBspheres_lambertian.dae</code></figcaption>
 				</td>
 			  </tr>
 			  <tr>
 				<td style="text-align: center;">
-				  <img src="assets/cornell.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				  <img src="assets/p1_CBgems.png" width="400px"/>
+				  <figcaption><code>CBgems.dae</code></figcaption>
 				</td>
 				<td style="text-align: center;">
-				  <img src="assets/cornell.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				  <img src="assets/p1_teapot.png" width="400px"/>
+				  <figcaption><code>teapot.dae</code></figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p1_cow.png" width="400px"/>
+				  <figcaption><code>cow.dae</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p1_banana.png" width="400px"/>
+				  <figcaption><code>banana.dae</code></figcaption>
 				</td>
 			  </tr>
 			</table>
