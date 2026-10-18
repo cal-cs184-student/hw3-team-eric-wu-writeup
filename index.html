@@ -106,7 +106,56 @@
 		</div>
 		
 		<h2>Part 2: Bounding Volume Hierarchy</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+		<h3>BVH construction</h3>
+		<p>I implemented BVH construction, ray-box intersection and BVH traversal according to the spec.</p>
+		<ul>
+			<li>For each node, I compute the bounding box of its primitives and a second box around their centroids.</li>
+			<li>If there are at most <code>max_leaf_size</code> primitives, the node is a leaf, and <code>start</code>/<code>end</code> point to that range.</li>
+			<li>Otherwise I pick a split, reorder the range in place with <code>std::partition</code> into [start, mid) and [mid, end), and recurse on each half. Since the reordering is in place, every leaf's iterators point straight into the one shared primitive vector.</li>
+		</ul>
+		<p><b>Split heuristic:</b> I split along the axis where the centroid box is longest, at the midpoint of the centroid box on that axis.</p>
+		<ul>
+			<li>It's O(n) per node, and the longest axis is where the primitives are most spread out.</li>
+			<li>Using the centroid box instead of the full box means the split always lies between the smallest and largest centroid, so both sides are non-empty. The only exception is when all centroids coincide; in that case I fall back to a median split with <code>std::nth_element</code>, which avoids infinite recursion.</li>
+		</ul>
+		<p><b>Traversal:</b> <code>BBox::intersect</code> uses the slab method, clipping [min_t, max_t] against each axis's pair of planes. A node is skipped if the clipped interval is empty. <code>has_intersection</code> returns at the first hit. <code>intersect</code> visits both children, and boxes beyond the closest hit are skipped because primitives shrink max_t.</p>
+
+		<h3>Results: large meshes</h3>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p2_maxplanck.png" width="400px"/>
+				  <figcaption><code>maxplanck.dae</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p2_beast.png" width="400px"/>
+				  <figcaption><code>beast.dae</code></figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p2_CBlucy.png" width="400px"/>
+				  <figcaption><code>CBlucy.dae</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p2_CBdragon.png" width="400px"/>
+				  <figcaption><code>CBdragon.dae</code></figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h3>Timing comparison</h3>
+		<p>800x600, 8 threads (<code>-t 8</code>), normal shading. Times are render time only, not BVH build time.</p>
+		<table style="margin: 0 auto; border-collapse: collapse;" border="1" cellpadding="6">
+			<tr><th>Scene</th><th>Primitives</th><th>Without BVH</th><th>With BVH</th><th>Speedup</th></tr>
+			<tr><td><code>cow</code></td><td>5,856</td><td>5.70s</td><td>0.037s</td><td>~150x</td></tr>
+			<tr><td><code>maxplanck</code></td><td>50,801</td><td>59.2s</td><td>0.032s</td><td>~1,850x</td></tr>
+			<tr><td><code>CBlucy</code></td><td>133,796</td><td>151s</td><td>0.021s</td><td>~7,200x</td></tr>
+		</table>
+		<p>Without the BVH, render time grows roughly linearly with primitive count (5.7s, 59s, 151s for 5.9k, 51k, 134k primitives), because every ray is tested against every primitive. With the BVH, all three scenes render in under 0.04s regardless of size, because each ray only descends into the few boxes it actually hits, making the cost about O(log n) instead of O(n). So the speedup grows with scene size, from about 150x for the cow to about 7,200x for CBlucy. CBlucy is even faster than the cow with the BVH because the statue covers few pixels, and most rays hit the box's few large wall triangles.</p>
 
 		<h2>Part 3: Direct Illumination</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
