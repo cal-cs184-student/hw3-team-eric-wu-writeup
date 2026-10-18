@@ -158,7 +158,93 @@
 		<p>Without the BVH, render time grows roughly linearly with primitive count (5.7s, 59s, 151s for 5.9k, 51k, 134k primitives), because every ray is tested against every primitive. With the BVH, all three scenes render in under 0.04s regardless of size, because each ray only descends into the few boxes it actually hits, making the cost about O(log n) instead of O(n). So the speedup grows with scene size, from about 150x for the cow to about 7,200x for CBlucy. CBlucy is even faster than the cow with the BVH because the statue covers few pixels, and most rays hit the box's few large wall triangles.</p>
 
 		<h2>Part 3: Direct Illumination</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+		<h3>Direct lighting implementations</h3>
+		<p>I implemented the diffuse BSDF, zero-bounce radiance and both direct lighting functions according to the spec. The diffuse BSDF returns reflectance / pi. Zero-bounce radiance is the emission of the surface the ray hits.</p>
+		<p>Both estimators compute the same Monte Carlo sum: L_out = (1/N) * sum of f(w_in -> w_out) * L_in * cos(theta) / pdf(w_in). Directions are in the hit point's local frame, so cos(theta) = w_in.z.</p>
+		<p><b>Uniform hemisphere sampling:</b></p>
+		<ul>
+			<li>Take N = (number of lights) * <code>ns_area_light</code> samples.</li>
+			<li>For each one, pick w_in uniformly on the hemisphere (pdf = 1 / (2*pi)) and cast a ray from hit_p in direction o2w * w_in, with min_t = EPS_F.</li>
+			<li>If the ray hits something, add that surface's emission to the sum. Most directions miss the light and add nothing.</li>
+		</ul>
+		<p><b>Importance sampling the lights:</b></p>
+		<ul>
+			<li>For each light, take <code>ns_area_light</code> samples, or 1 for a point/directional light, since its samples are all identical.</li>
+			<li><code>sample_L</code> returns a direction toward the light, the distance to it, its pdf and the incoming radiance.</li>
+			<li>Skip the sample if the light is behind the surface (w_in.z &lt;= 0).</li>
+			<li>Cast a shadow ray with min_t = EPS_F and max_t = distToLight - EPS_F. If it hits anything, the point is in shadow. Otherwise, add the sample to the sum.</li>
+			<li>Average each light's samples and sum over all lights.</li>
+		</ul>
+
+		<h3>Hemisphere vs. light sampling</h3>
+		<p>Settings: <code>-s 64 -l 32</code>. Cornell boxes are 480x360; the dragon is 480x480.</p>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr><th>Uniform hemisphere sampling</th><th>Light sampling</th></tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p3_CBbunny_H.png" width="400px"/>
+				  <figcaption><code>CBbunny.dae</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p3_CBbunny_IS.png" width="400px"/>
+				  <figcaption><code>CBbunny.dae</code></figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p3_CBspheres_lambertian_H.png" width="400px"/>
+				  <figcaption><code>CBspheres_lambertian.dae</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p3_CBspheres_lambertian_IS.png" width="400px"/>
+				  <figcaption><code>CBspheres_lambertian.dae</code></figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p3_dragon_H.png" width="400px"/>
+				  <figcaption><code>dragon.dae</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p3_dragon_IS.png" width="400px"/>
+				  <figcaption><code>dragon.dae</code></figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h3>Number of light rays</h3>
+		<p><code>CBbunny.dae</code> with light sampling, <code>-s 1</code>, 480x360.</p>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p3_CBbunny_l1.png" width="400px"/>
+				  <figcaption><code>-l 1</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p3_CBbunny_l4.png" width="400px"/>
+				  <figcaption><code>-l 4</code></figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p3_CBbunny_l16.png" width="400px"/>
+				  <figcaption><code>-l 16</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p3_CBbunny_l64.png" width="400px"/>
+				  <figcaption><code>-l 64</code></figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+		<p>With <code>-l 1</code>, each pixel's single shadow ray either reaches the light or doesn't, so the soft shadow under the bunny is speckled black and white. As <code>-l</code> goes up, each pixel averages over more points on the area light, so the shadow edge turns into a smooth gradient. By <code>-l 64</code> it's nearly noise-free, even at 1 sample per pixel.</p>
+
+		<h3>Analysis</h3>
+		<p>At the same settings, hemisphere sampling is grainy everywhere, while light sampling gives smooth walls and clean soft shadows. With hemisphere sampling, most random directions miss the small ceiling light and contribute 0, and the few that hit contribute a lot, so the estimate has high variance. Light sampling only sends rays toward the light, so every unblocked sample contributes. It was also no slower: 20s vs. 35s on CBbunny and about 22s each on CBspheres. Light sampling can also render point and directional lights, which hemisphere sampling never hits. That is why the hemisphere-sampled <code>dragon.dae</code>, lit by a directional light, is completely black.</p>
 
 		<h2>Part 4: Global Illumination</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
