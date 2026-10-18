@@ -296,7 +296,7 @@
 			  </tr>
 			</table>
 		</div>
-		<p>P4_DI</p>
+		<p>Direct lighting alone has hard contrast: the ceiling is black, the spheres' undersides and shadows are pitch black, and walls only get light straight from the area light. Indirect lighting fills all of that in. The ceiling is lit, the shadows are soft instead of black, and there is color bleeding: red on the left side of the left sphere and blue on the right side of the right one. The light itself is black in the indirect image because it is only seen directly.</p>
 
 		<h3>Individual bounces (<code>-o 0</code>)</h3>
 		<p><code>CBbunny.dae</code>, only the m-th bounce of light. Russian roulette is off for this comparison and the next one, so each bounce is computed exactly.</p>
@@ -332,7 +332,7 @@
 			  </tr>
 			</table>
 		</div>
-		<p>P4_BOUNCES</p>
+		<p>m = 0 is just the light and m = 1 is direct lighting. The 2nd bounce lights everything direct lighting can't reach: the ceiling, the bunny's underside and the shadow under it. It also carries the wall colors, so the floor and bunny pick up red and blue tints. The 3rd bounce is dimmer and almost uniform, a soft fill light that smooths out what's left of the shadows. Each later bounce is darker, since every diffuse bounce absorbs some light. Rasterization usually only models direct lighting plus a constant ambient term. These bounces are what produce the soft shadows, lit ceiling and color bleeding that make the path-traced image look real.</p>
 
 		<h3>Accumulated bounces (<code>-o 1</code>)</h3>
 		<div style="display: flex; flex-direction: column; align-items: center;">
@@ -367,7 +367,7 @@
 			  </tr>
 			</table>
 		</div>
-		<p>P4_ACCUM</p>
+		<p>Each accumulated image is the sum of the individual bounces up to m. The big jump is from m = 1 to m = 2, when the ceiling and shadows get lit and color bleeding appears. After that, each extra bounce makes the image only slightly brighter, and m = 4 and m = 5 are almost identical, because higher bounces carry little energy.</p>
 
 		<h3>Russian roulette</h3>
 		<p><code>CBbunny.dae</code>, accumulated, with continuation probability 0.65.</p>
@@ -403,7 +403,7 @@
 			  </tr>
 			</table>
 		</div>
-		<p>P4_RR</p>
+		<p>m = 0 to 2 match the accumulated images, since the first indirect bounce is always traced. From m = 3 on, Russian roulette randomly ends paths, but surviving paths are scaled by 1 / 0.65, so the result is the same in expectation, just slightly noisier. m = 100 looks almost the same as m = 4 and still renders quickly, because paths almost never survive many coin flips (0.65^10 is about 1%). This gives nearly unbiased infinite-bounce lighting at the cost of a few bounces.</p>
 
 		<h3>Samples per pixel</h3>
 		<p><code>CBspheres_lambertian.dae</code>, <code>-l 4 -m 5</code>.</p>
@@ -443,10 +443,47 @@
 			  </tr>
 			</table>
 		</div>
-		<p>P4_SPP</p>
+		<p>At 1 and 2 spp, the image is mostly salt-and-pepper noise, because each pixel's value comes from one or two random paths. Noise goes down as the sample count goes up, roughly as 1 / sqrt(spp). By 16 spp the shapes and shadows are clear but grainy, at 64 spp only fine grain is left, and at 1024 spp the image is clean. Soft shadows and the ceiling, which get most of their light from indirect bounces, take the longest to clean up.</p>
 
 		<h2>Part 5: Adaptive Sampling</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+		<h3>Adaptive sampling</h3>
+		<p>Some pixels, like flat walls, converge after a few samples. Others, like soft shadows and areas lit only by bounced light, need many more. Adaptive sampling stops tracing a pixel once it has converged, so the sample budget goes to the pixels that are still noisy.</p>
+		<p>I implemented it in <code>raytrace_pixel</code> according to the spec:</p>
+		<ul>
+			<li>For each sample, add its illuminance x to s1 and x^2 to s2.</li>
+			<li>Every <code>samplesPerBatch</code> samples, compute mean = s1 / n, var = (s2 - s1^2 / n) / (n - 1) and I = 1.96 * sqrt(var / n).</li>
+			<li>If I &lt;= maxTolerance * mean, the pixel has converged (95% confidence interval), so stop. Otherwise continue, up to <code>ns_aa</code> samples.</li>
+			<li>Average the radiance over the n samples actually taken, and write n to <code>sampleCountBuffer</code>.</li>
+		</ul>
+
+		<h3>Results</h3>
+		<p><code>-s 2048 -a 64 0.05 -l 1 -m 5</code>. CBbunny is 480x360; the dragon is 480x480. In the sample rate images, red means many samples and blue means few.</p>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p5_CBbunny.png" width="400px"/>
+				  <figcaption><code>CBbunny.dae</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p5_CBbunny_rate.png" width="400px"/>
+				  <figcaption><code>CBbunny.dae</code> sample rate</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p5_dragon.png" width="400px"/>
+				  <figcaption><code>dragon.dae</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p5_dragon_rate.png" width="400px"/>
+				  <figcaption><code>dragon.dae</code> sample rate</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+		<p>Both renders are essentially noise-free. In CBbunny, the walls and floor converge quickly (blue), and so does the light, which is bright and constant. The ceiling, the shadow under the bunny and the bunny's underside use the most samples (red). They are lit mostly by indirect bounces, so their samples vary a lot. In the dragon scene, the empty background stops after the first batch, because every sample is 0. The dragon and the dark edges of the base, which are in shadow or lit only by bounced light, run close to the 2048 maximum. So the samples go to the hard regions, and the renders took 55s and 79s.</p>
 
 		<h2>(Optional) Part 6: Extra Credit Opportunities</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
