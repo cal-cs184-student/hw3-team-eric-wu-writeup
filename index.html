@@ -247,7 +247,203 @@
 		<p>At the same settings, hemisphere sampling is grainy everywhere, while light sampling gives smooth walls and clean soft shadows. With hemisphere sampling, most random directions miss the small ceiling light and contribute 0, and the few that hit contribute a lot, so the estimate has high variance. Light sampling only sends rays toward the light, so every unblocked sample contributes. It was also no slower: 20s vs. 35s on CBbunny and about 22s each on CBspheres. Light sampling can also render point and directional lights, which hemisphere sampling never hits. That is why the hemisphere-sampled <code>dragon.dae</code>, lit by a directional light, is completely black.</p>
 
 		<h2>Part 4: Global Illumination</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+		<h3>Indirect lighting implementation</h3>
+		<p>I implemented <code>DiffuseBSDF::sample_f</code>, <code>at_least_one_bounce_radiance</code> and Russian roulette according to the spec. <code>sample_f</code> draws w_in from the cosine-weighted hemisphere sampler, which also sets the pdf (cos(theta) / pi), and returns f(w_in -&gt; w_out).</p>
+		<ul>
+			<li>Camera rays start with depth = max_ray_depth, and each bounce decrements it. At depth 0 the function returns 0.</li>
+			<li>Add <code>one_bounce_radiance</code> at the current hit. If isAccumBounces is false, only add it at depth 1, so the result is just the m-th bounce.</li>
+			<li>At depth 1, stop. Otherwise, continue with probability 0.65 (Russian roulette). The first indirect bounce, at depth = max_ray_depth, is always traced.</li>
+			<li>Sample w_in with <code>sample_f</code> and cast a ray from hit_p in direction o2w * w_in, with min_t = EPS_F and depth - 1. If it hits something, recurse and add f * L_in * cos(theta) / pdf / 0.65.</li>
+			<li><code>est_radiance_global_illumination</code> returns zero-bounce emission (only when accumulating, or when m = 0) plus <code>at_least_one_bounce_radiance</code>.</li>
+		</ul>
+		<p>All renders below use 1024 samples per pixel and <code>-l 4</code>. Cornell boxes are 480x360; the dragon is 480x480.</p>
+
+		<h3>Global illumination</h3>
+		<p><code>-m 5</code>, with Russian roulette.</p>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p4_gi_CBbunny.png" width="260px"/>
+				  <figcaption><code>CBbunny.dae</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_gi_CBspheres.png" width="260px"/>
+				  <figcaption><code>CBspheres_lambertian.dae</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_gi_dragon.png" width="260px"/>
+				  <figcaption><code>dragon.dae</code></figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h3>Direct vs. indirect illumination</h3>
+		<p>Direct is <code>-m 1</code> (zero + one bounce). For indirect, I temporarily changed <code>at_least_one_bounce_radiance</code> to drop the zero-bounce and first one-bounce terms, and rendered with <code>-m 5</code>.</p>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p4_direct_CBspheres.png" width="400px"/>
+				  <figcaption>Direct only</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_indirect_CBspheres.png" width="400px"/>
+				  <figcaption>Indirect only</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+		<p>P4_DI</p>
+
+		<h3>Individual bounces (<code>-o 0</code>)</h3>
+		<p><code>CBbunny.dae</code>, only the m-th bounce of light. Russian roulette is off for this comparison and the next one, so each bounce is computed exactly.</p>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p4_unaccum_m0.png" width="260px"/>
+				  <figcaption><code>-m 0</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_unaccum_m1.png" width="260px"/>
+				  <figcaption><code>-m 1</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_unaccum_m2.png" width="260px"/>
+				  <figcaption><code>-m 2</code></figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p4_unaccum_m3.png" width="260px"/>
+				  <figcaption><code>-m 3</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_unaccum_m4.png" width="260px"/>
+				  <figcaption><code>-m 4</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_unaccum_m5.png" width="260px"/>
+				  <figcaption><code>-m 5</code></figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+		<p>P4_BOUNCES</p>
+
+		<h3>Accumulated bounces (<code>-o 1</code>)</h3>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p4_accum_m0.png" width="260px"/>
+				  <figcaption><code>-m 0</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_accum_m1.png" width="260px"/>
+				  <figcaption><code>-m 1</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_accum_m2.png" width="260px"/>
+				  <figcaption><code>-m 2</code></figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p4_accum_m3.png" width="260px"/>
+				  <figcaption><code>-m 3</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_accum_m4.png" width="260px"/>
+				  <figcaption><code>-m 4</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_accum_m5.png" width="260px"/>
+				  <figcaption><code>-m 5</code></figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+		<p>P4_ACCUM</p>
+
+		<h3>Russian roulette</h3>
+		<p><code>CBbunny.dae</code>, accumulated, with continuation probability 0.65.</p>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p4_rr_m0.png" width="260px"/>
+				  <figcaption><code>-m 0</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_rr_m1.png" width="260px"/>
+				  <figcaption><code>-m 1</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_rr_m2.png" width="260px"/>
+				  <figcaption><code>-m 2</code></figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p4_rr_m3.png" width="260px"/>
+				  <figcaption><code>-m 3</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_rr_m4.png" width="260px"/>
+				  <figcaption><code>-m 4</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_rr_m100.png" width="260px"/>
+				  <figcaption><code>-m 100</code></figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+		<p>P4_RR</p>
+
+		<h3>Samples per pixel</h3>
+		<p><code>CBspheres_lambertian.dae</code>, <code>-l 4 -m 5</code>.</p>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p4_spp_1.png" width="200px"/>
+				  <figcaption><code>-s 1</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_spp_2.png" width="200px"/>
+				  <figcaption><code>-s 2</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_spp_4.png" width="200px"/>
+				  <figcaption><code>-s 4</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_spp_8.png" width="200px"/>
+				  <figcaption><code>-s 8</code></figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="assets/p4_spp_16.png" width="200px"/>
+				  <figcaption><code>-s 16</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_spp_64.png" width="200px"/>
+				  <figcaption><code>-s 64</code></figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="assets/p4_gi_CBspheres.png" width="200px"/>
+				  <figcaption><code>-s 1024</code></figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+		<p>P4_SPP</p>
 
 		<h2>Part 5: Adaptive Sampling</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
