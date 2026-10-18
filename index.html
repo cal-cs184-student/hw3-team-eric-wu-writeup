@@ -46,8 +46,7 @@
 		-->
 
 		<h2>Overview</h2>
-		<!-- TODO: -->
-		Give a high-level overview of what you implemented in this homework. Think about what you've built as a whole. Share your thoughts on what interesting things you've learned from completing the homework.
+		<p>I built a physically based path tracer. It generates camera rays, intersects them with triangles and spheres, and speeds that up with a BVH. It then computes direct lighting with hemisphere and light sampling, global illumination with Russian roulette, and adaptive sampling per pixel. The most interesting part was seeing how much of an image's realism comes from indirect bounces, and how sampling choices trade noise against render time.</p>
 
 		<h2>Part 1: Ray Generation and Scene Intersection</h2>
 
@@ -485,7 +484,7 @@
 		</div>
 		<p>Both renders are essentially noise-free. In CBbunny, the walls and floor converge quickly (blue), and so does the light, which is bright and constant. The ceiling, the shadow under the bunny and the bunny's underside use the most samples (red). They are lit mostly by indirect bounces, so their samples vary a lot. In the dragon scene, the empty background stops after the first batch, because every sample is 0. The dragon and the dark edges of the base, which are in shadow or lit only by bounced light, run close to the 2048 maximum. So the samples go to the hard regions, and the renders took 55s and 79s.</p>
 
-		<h2>(Optional) Part 6: Extra Credit Opportunities</h2>
+		<!-- <h2>(Optional) Part 6: Extra Credit Opportunities</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 		
 		<h2>Additional Notes (please remove)</h2>
@@ -498,6 +497,6 @@
 				</ul>
 			</li>
 		</ul>
-		</div>
+		</div> -->
 	</body>
 </html>
